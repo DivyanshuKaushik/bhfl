@@ -1,6 +1,6 @@
-const fs = require("fs");
 const express = require("express");
 const validator = require("validator");
+const { connectDB, Operation } = require("./db");
 
 const app = express();
 
@@ -10,15 +10,22 @@ app.use(express.urlencoded({ extended: true }));
 // load env
 require("dotenv").config();
 
+// connect to database
+connectDB();
+
+// load models
+
 app.get("/bfhl", async (req, res) => {
     try {
-        const operation_code = JSON.parse(
-            fs.readFileSync("./operation.json")
-        ).operation_code;
+        const data= await Operation.findOne({
+            roll_number: "RA2011003010819",
+        });
+        if (!data) throw new Error("Invalid Operation Code");
         return res.status(200).json({
-            operation_code,
+            operation_code:data.operation_code,
         });
     } catch (err) {
+        console.error(err);
         return res.status(500).json({
             error: err ? err : "Internal Server Error",
         });
@@ -34,16 +41,21 @@ app.post("/bfhl", async (req, res) => {
     // data
     let alphabets = [];
     let numbers = [];
-    success = false;
-
-    // read json file and update operation code
-    let operation_code = JSON.parse(
-        fs.readFileSync("./operation.json")
-    ).operation_code;
-    operation_code += 1;
-    fs.writeFileSync("./operation.json", JSON.stringify({ operation_code }));
 
     try {
+        let resp = await Operation.findOne({ roll_number: "RA2011003010819" });
+        
+        if (resp && resp.operation_code) {
+            resp.operation_code++;
+            await resp.save();
+        } else {
+            const operation = new Operation({
+                roll_number,
+                operation_code: 1,
+            });
+            await operation.save();
+        }
+
         const { data } = req.body;
         await data.forEach((item) => {
             if (validator.isAlpha(item)) alphabets.push(item);
@@ -59,7 +71,7 @@ app.post("/bfhl", async (req, res) => {
             alphabets,
         });
     } catch (err) {
-        console.error(err);
+        console.error("errr",err);
         return res.status(400).json({
             is_success: false,
             user_id,
@@ -75,7 +87,7 @@ app.get("*", (req, res) => {
     return res.status(404).json({
         error: "Not Found",
     });
-})
+});
 
 app.listen(process.env.PORT || 4000, () => {
     console.log(`Server is running on port ${process.env.PORT || 4000}`);
